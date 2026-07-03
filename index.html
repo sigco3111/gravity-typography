@@ -1,11 +1,618 @@
 <!DOCTYPE html>
-<!-- Placeholder: MiniMax-M3 via OpenCode will replace this with the full implementation. -->
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>gravity-typography</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>gravity-typography · 알파벳 물리 레인</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #07070d;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Inter", "Segoe UI", Arial, sans-serif;
+      color: #fff;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    canvas {
+      display: block;
+      cursor: crosshair;
+      background: radial-gradient(ellipse at center, #0d0d1c 0%, #050509 70%, #02020a 100%);
+    }
+
+    .hud {
+      position: fixed;
+      pointer-events: none;
+      z-index: 10;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.55);
+      mix-blend-mode: difference;
+    }
+    .hud-title {
+      top: 22px;
+      left: 24px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .hud-title small {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      opacity: 0.55;
+      margin-top: 5px;
+      font-weight: 400;
+    }
+    .hud-stats {
+      bottom: 22px;
+      right: 24px;
+      font-family: "SF Mono", ui-monospace, "JetBrains Mono", Monaco, Consolas, monospace;
+      font-size: 10px;
+      text-align: right;
+      letter-spacing: 0.1em;
+      line-height: 1.7;
+    }
+    .hud-stats .val {
+      color: rgba(255, 255, 255, 0.85);
+      font-weight: 500;
+    }
+    .hud-hint {
+      bottom: 22px;
+      left: 24px;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      opacity: 0.6;
+    }
+    .hud-hint kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 9px;
+      margin: 0 3px;
+      letter-spacing: 0.1em;
+    }
+
+    /* Prevents default touch gestures interfering */
+    canvas, body { touch-action: none; }
+
+    /* Boot screen — visible only while fonts/Matter.js are loading */
+    #boot {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #07070d;
+      z-index: 100;
+      transition: opacity 0.4s ease-out;
+      pointer-events: none;
+    }
+    #boot .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.6);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; transform: scale(0.85); }
+      50%      { opacity: 1;   transform: scale(1.15); }
+    }
+    #boot.hidden { opacity: 0; }
+  </style>
 </head>
 <body>
-  <p>Work in progress — OpenCode / MiniMax-M3 미션 대기 중</p>
+  <div class="hud hud-title">
+    Gravity Typography
+    <small>Alphabet Rain · Matter.js</small>
+  </div>
+
+  <div class="hud hud-hint">
+    <kbd>MOVE</kbd> stir &nbsp; <kbd>CLICK</kbd> blast &nbsp; <kbd>HOLD</kbd> storm
+  </div>
+
+  <div class="hud hud-stats">
+    <div><span class="val" id="count">0</span> letters</div>
+    <div><span class="val" id="fps">0</span> fps</div>
+  </div>
+
+  <canvas id="stage"></canvas>
+
+  <div id="boot"><div class="dot"></div></div>
+
+  <!-- Matter.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+  <script>
+  /**
+   * gravity-typography
+   * ----------------------------------------------------------------
+   * Thousands of alphabet letters fall under Matter.js gravity, pile
+   * up on the floor, and explode outward when the user sweeps them.
+   *
+   * Architecture:
+   *  - One Matter.js rectangle body per letter (≈1500 max bodies)
+   *  - Each letter is drawn from a pre-rendered offscreen glyph cache
+   *    (one canvas per glyph, A-Z) for ~10x faster rendering than
+   *    fillText on the main canvas every frame.
+   *  - Off-thread-ready: the render loop is sync, physics uses a fixed
+   *    60Hz timestep regardless of frame rate.
+   *  - Mouse stir = directional force scaled by cursor velocity.
+   *    Click blast = radial impulse + upward bias (the explosion).
+   * ----------------------------------------------------------------
+   */
+
+  // Wait for fonts before initializing — Canvas2D fillText needs the
+  // typeface to be resolvable, otherwise it falls back silently to a
+  // missing-glyph path in some headless environments.
+  function boot() {
+    if (typeof Matter === 'undefined') {
+      // Matter.js still loading — try again on next frame.
+      return requestAnimationFrame(boot);
+    }
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(init);
+    } else {
+      init();
+    }
+  }
+
+  function init() {
+    const { Engine, World, Bodies, Body, Composite } = Matter;
+
+    // ============================================================
+    //  Canvas + DPR setup
+    // ============================================================
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    const countEl = document.getElementById('count');
+    const fpsEl = document.getElementById('fps');
+    const bootEl = document.getElementById('boot');
+
+    let W = 0, H = 0, DPR = 1;
+
+    function resize() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width  = Math.floor(W * DPR);
+      canvas.height = Math.floor(H * DPR);
+      canvas.style.width  = W + 'px';
+      canvas.style.height = H + 'px';
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ============================================================
+    //  Pre-rendered glyph cache (offscreen canvases)
+    //
+    //  We pick ONE representative font and bake 26 canvases — one
+    //  per letter. Each render call does a single drawImage of the
+    //  matching 38x38 sprite. The cost of drawing is ~constant and
+    //  independent of the letter count above the cache lookup.
+    // ============================================================
+    const FONT_SIZE  = 26;
+    const GLYPH_PAD  = 6;
+    const GLYPH_PX   = FONT_SIZE + GLYPH_PAD * 2;     // 38
+    const HALF_PX    = GLYPH_PX / 2;
+    const ALPHABET   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const glyphs     = new Map();
+
+    function makeGlyph(ch) {
+      const c = document.createElement('canvas');
+      c.width  = GLYPH_PX;
+      c.height = GLYPH_PX;
+      const g = c.getContext('2d');
+
+      // Cool blue/cyan/white palette — a subtle "data rain" tone.
+      const hue   = 195 + Math.random() * 55;
+      const sat   = 50 + Math.random() * 35;
+      const light = 82 + Math.random() * 10;
+      const color = 'hsl(' + hue + ',' + sat + '%,' + light + '%)';
+
+      g.font         = '600 ' + FONT_SIZE + 'px -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif';
+      g.textAlign    = 'center';
+      g.textBaseline = 'middle';
+
+      // Soft outer glow, drawn once during the bake.
+      g.shadowColor  = 'hsla(' + hue + ',' + sat + '%,' + light + '%,0.5)';
+      g.shadowBlur   = 5;
+      g.fillStyle    = color;
+      g.fillText(ch, HALF_PX, HALF_PX + 1);
+
+      glyphs.set(ch, { canvas: c, color });
+    }
+
+    // Verify the font actually renders by drawing a "canary" glyph and
+    // checking that at least some pixels got ink. Some headless envs
+    // resolve the requested family to a 0-width face — this guard
+    // forces a fallback to plain sans-serif when that happens.
+    function probeFont() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 40;
+      const g = c.getContext('2d');
+      g.font = '600 26px -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillStyle = '#fff';
+      g.fillText('M', 20, 21);
+      const data = g.getImageData(0, 0, 40, 40).data;
+      let ink = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 40) ink++;
+      }
+      return ink > 20;        // M should easily exceed 20 bright pixels
+    }
+
+    const useFallback = !probeFont();
+
+    if (useFallback) {
+      // Re-bake with the most reliable font in the stack.
+      // We can't easily re-call makeGlyph without re-defining it, so
+      // we patch the font string on the existing canvases.
+      // Easier: just clear and re-draw into a separate set using the
+      // fallback. Simpler: rebuild glyphs after font probe.
+      glyphs.clear();
+      for (const ch of ALPHABET) makeGlyphFallback(ch);
+    }
+
+    function makeGlyphFallback(ch) {
+      const c = document.createElement('canvas');
+      c.width  = GLYPH_PX;
+      c.height = GLYPH_PX;
+      const g = c.getContext('2d');
+
+      const hue   = 195 + Math.random() * 55;
+      const sat   = 50 + Math.random() * 35;
+      const light = 82 + Math.random() * 10;
+      const color = 'hsl(' + hue + ',' + sat + '%,' + light + '%)';
+
+      g.font         = '600 ' + FONT_SIZE + 'px Arial, sans-serif';
+      g.textAlign    = 'center';
+      g.textBaseline = 'middle';
+      g.shadowColor  = 'hsla(' + hue + ',' + sat + '%,' + light + '%,0.5)';
+      g.shadowBlur   = 5;
+      g.fillStyle    = color;
+      g.fillText(ch, HALF_PX, HALF_PX + 1);
+
+      glyphs.set(ch, { canvas: c, color });
+    }
+
+    for (const ch of ALPHABET) {
+      if (useFallback) {
+        makeGlyphFallback(ch);
+      } else {
+        makeGlyph(ch);
+      }
+    }
+
+    // ============================================================
+    //  Physics engine
+    // ============================================================
+    const engine = Engine.create({
+      gravity:           { x: 0, y: 1.0, scale: 0.0011 },
+      enableSleeping:    true,
+      constraintIterations: 2,
+      positionIterations:  6,
+      velocityIterations:  4
+    });
+    const world = engine.world;
+
+    // ---- Static walls (floor + sides) ----
+    const walls = [];
+    const WALL_T = 240;
+
+    function buildWalls() {
+      for (const w of walls) World.remove(world, w);
+      walls.length = 0;
+
+      const floor = Bodies.rectangle(
+        W / 2, H + WALL_T / 2 - 6,
+        W * 3, WALL_T,
+        { isStatic: true, friction: 0.95, restitution: 0.05, label: 'floor' }
+      );
+      const leftWall = Bodies.rectangle(
+        -WALL_T / 2, H / 2,
+        WALL_T, H * 3,
+        { isStatic: true, friction: 0.6, label: 'wall' }
+      );
+      const rightWall = Bodies.rectangle(
+        W + WALL_T / 2, H / 2,
+        WALL_T, H * 3,
+        { isStatic: true, friction: 0.6, label: 'wall' }
+      );
+      walls.push(floor, leftWall, rightWall);
+      World.add(world, walls);
+    }
+    buildWalls();
+    window.addEventListener('resize', buildWalls);
+
+    // ============================================================
+    //  Letter factory — each letter = one Matter rectangle body
+    // ============================================================
+    const LETTER_W = 17;
+    const LETTER_H = 23;
+    const MAX_LETTERS = 1600;
+    const letters = [];
+
+    function spawnLetter(x, y) {
+      const ch = ALPHABET[(Math.random() * ALPHABET.length) | 0];
+      const glyph = glyphs.get(ch);
+
+      const body = Bodies.rectangle(x, y, LETTER_W, LETTER_H, {
+        angle:          (Math.random() - 0.5) * 1.2,
+        friction:       0.55,
+        frictionStatic: 0.9,
+        restitution:    0.12,
+        density:        0.0014,
+        slop:           0.02,
+        chamfer:        { radius: 2 },
+        label:          'letter'
+      });
+
+      Body.setVelocity(body, {
+        x: (Math.random() - 0.5) * 2.5,
+        y: Math.random() * 1.5 + 0.5
+      });
+      Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.18);
+
+      World.add(world, body);
+      // Store the pre-resolved glyph so the render hot-loop avoids a
+      // Map lookup per body per frame.
+      letters.push({ body, glyphCanvas: glyph.canvas });
+    }
+
+    function spawnRain(count) {
+      for (let i = 0; i < count; i++) {
+        if (letters.length >= MAX_LETTERS) return;
+        spawnLetter(
+          Math.random() * (W - 60) + 30,
+          -40 - Math.random() * 220
+        );
+      }
+    }
+
+    // ============================================================
+    //  Mouse / Touch input
+    // ============================================================
+    const mouse = {
+      x: W / 2, y: H / 2,
+      prevX: W / 2, prevY: H / 2,
+      velX: 0, velY: 0,
+      down: false,
+      inWindow: true
+    };
+    let lastInputTime = performance.now();
+
+    function trackInput(x, y) {
+      const now = performance.now();
+      const dt = Math.max(now - lastInputTime, 8);
+      lastInputTime = now;
+      mouse.prevX = mouse.x;
+      mouse.prevY = mouse.y;
+      mouse.x = x;
+      mouse.y = y;
+      // Normalise to "per ~16ms frame" units so force tuning is framerate-independent.
+      mouse.velX = (mouse.x - mouse.prevX) / dt * 16;
+      mouse.velY = (mouse.y - mouse.prevY) / dt * 16;
+    }
+
+    canvas.addEventListener('mousemove', e => trackInput(e.clientX, e.clientY));
+    canvas.addEventListener('mousedown', () => {
+      mouse.down = true;
+      explode(mouse.x, mouse.y, 1.0);
+    });
+    window.addEventListener('mouseup',     () => { mouse.down = false; });
+    window.addEventListener('mouseleave',  () => { mouse.inWindow = false; });
+    window.addEventListener('mouseenter',  () => {
+      mouse.inWindow = true;
+      lastInputTime = performance.now();
+    });
+
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const t = e.touches[0];
+      if (!t) return;
+      trackInput(t.clientX, t.clientY);
+    }, { passive: false });
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const t = e.touches[0];
+      if (!t) return;
+      trackInput(t.clientX, t.clientY);
+      explode(mouse.x, mouse.y, 0.85);
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => { mouse.down = false; });
+
+    // ============================================================
+    //  Forces — explosion (radial + upward bias) and stir (directional)
+    // ============================================================
+    function explode(x, y, strength) {
+      const radius = 300 * strength;
+      const radiusSq = radius * radius;
+      const bodies = Composite.allBodies(world);
+
+      for (let i = 0; i < bodies.length; i++) {
+        const b = bodies[i];
+        if (b.isStatic) continue;
+
+        const dx = b.position.x - x;
+        const dy = b.position.y - y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= radiusSq) continue;
+
+        const dist = Math.sqrt(distSq) + 0.0001;
+        const falloff = 1 - dist / radius;
+        const k = falloff * falloff;       // quadratic falloff
+        const force = k * 0.055 * strength * b.mass;
+
+        Body.applyForce(b, b.position, {
+          x: (dx / dist) * force,
+          y: (dy / dist) * force - k * 0.038 * strength * b.mass  // upward bias
+        });
+      }
+    }
+
+    function stir() {
+      const speed = Math.sqrt(mouse.velX * mouse.velX + mouse.velY * mouse.velY);
+      if (speed < 0.6 || !mouse.inWindow) return;
+
+      const effectiveSpeed = Math.min(speed, 55);
+      const radius = Math.min(150, 55 + effectiveSpeed * 1.8);
+      const radiusSq = radius * radius;
+
+      const nx = mouse.velX / (speed + 0.001);
+      const ny = mouse.velY / (speed + 0.001);
+
+      const bodies = Composite.allBodies(world);
+      for (let i = 0; i < bodies.length; i++) {
+        const b = bodies[i];
+        if (b.isStatic) continue;
+
+        const dx = b.position.x - mouse.x;
+        const dy = b.position.y - mouse.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= radiusSq || distSq < 1) continue;
+
+        const dist = Math.sqrt(distSq);
+        const falloff = 1 - dist / radius;
+
+        const carry  = falloff * effectiveSpeed * 0.0014 * b.mass;
+        const radial = falloff * 0.0018 * b.mass;
+
+        Body.applyForce(b, b.position, {
+          x: nx * carry + (dx / dist) * radial,
+          y: ny * carry + (dy / dist) * radial
+        });
+      }
+    }
+
+    // ============================================================
+    //  Renderer — Canvas 2D with setTransform per body
+    // ============================================================
+    function render() {
+      // Slight fade paints a soft motion trail (good for the rain feel).
+      ctx.fillStyle = 'rgba(7, 7, 13, 0.42)';
+      ctx.fillRect(0, 0, W, H);
+
+      const dpr = DPR;
+      const half = HALF_PX;
+
+      for (let i = 0; i < letters.length; i++) {
+        const l  = letters[i];
+        const b  = l.body;
+        const px = b.position.x;
+        const py = b.position.y;
+
+        // Off-screen cull
+        if (py < -60 || py > H + 80 || px < -60 || px > W + 60) continue;
+
+        const cos = Math.cos(b.angle);
+        const sin = Math.sin(b.angle);
+        ctx.setTransform(
+          cos * dpr,  sin * dpr,
+          -sin * dpr, cos * dpr,
+          px * dpr,   py * dpr
+        );
+        ctx.drawImage(l.glyphCanvas, -half, -half);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Soft cursor indicator — bigger + brighter when stirring.
+      const speed = Math.sqrt(mouse.velX * mouse.velX + mouse.velY * mouse.velY);
+      const r = 22 + Math.min(speed * 0.45, 42);
+      const alpha = mouse.down ? 0.55 : (0.12 + Math.min(speed * 0.006, 0.28));
+      const grad = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, r);
+      grad.addColorStop(0, 'rgba(255,255,255,' + alpha + ')');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (mouse.down) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, 80, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    // ============================================================
+    //  Main loop
+    // ============================================================
+    const FIXED_DT = 1000 / 60;
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+    let spawnAcc = 0;
+    let holdBlastAcc = 0;
+
+    function tick(now) {
+      const elapsed = Math.min(now - lastTime, 50);
+      lastTime = now;
+
+      mouse.velX *= 0.78;
+      mouse.velY *= 0.78;
+
+      stir();
+
+      if (mouse.down) {
+        holdBlastAcc += elapsed;
+        if (holdBlastAcc > 120) {
+          holdBlastAcc = 0;
+          explode(mouse.x, mouse.y, 0.55);
+        }
+      } else {
+        holdBlastAcc = 0;
+      }
+
+      spawnAcc += elapsed;
+      const spawnInterval = mouse.down ? 28 : 42;
+      while (spawnAcc > spawnInterval) {
+        spawnAcc -= spawnInterval;
+        if (letters.length < MAX_LETTERS) {
+          const burst = mouse.down ? 9 : 5;
+          spawnRain(burst);
+        }
+      }
+
+      Engine.update(engine, FIXED_DT);
+      render();
+
+      frameCount++;
+      if (now - lastFpsTime > 500) {
+        fpsEl.textContent = Math.round(frameCount / ((now - lastFpsTime) / 1000));
+        frameCount = 0;
+        lastFpsTime = now;
+      }
+      countEl.textContent = letters.length;
+
+      requestAnimationFrame(tick);
+    }
+
+    // Boot: hide the boot screen, prime the pile, start the loop.
+    bootEl.classList.add('hidden');
+    setTimeout(() => bootEl.remove(), 500);
+
+    spawnRain(280);
+    requestAnimationFrame(tick);
+  }
+
+  // Start the boot sequence once the DOM is ready.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+  </script>
 </body>
 </html>
