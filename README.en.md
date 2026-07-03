@@ -1,8 +1,8 @@
 # 🔤 gravity-typography
 
-> Alphabet rain from the top of the screen — letters with Matter.js physics tumble, pile up into hills, and explode outward when you sweep them with your mouse
+> Matter.js-powered alphabet gravity rain physics simulation
 
-Thousands of alphabet characters fall under gravity, each rendered as an independent physics body. They collide with the floor and walls, pile up on each other, and scatter explosively when disturbed by mouse interaction. 60fps interactive physics typography demo.
+Thousands of alphabet characters fall under gravity from the top of the screen. Each letter is an independent physics body that collides with the floor and walls, piles up into natural hills, and explodes outward when you sweep them with your mouse. 60fps interactive physics typography.
 
 [🇰🇷 한국어 (기본)](./README.md) · [🇺🇸 English](#)
 
@@ -10,26 +10,25 @@ Thousands of alphabet characters fall under gravity, each rendered as an indepen
 
 ## 🎬 Live Demo
 
-> **👉 Coming soon (Work in progress)** — `MiniMax-M3` is working on it via OpenCode
+> **👉 [https://gravity-typography.vercel.app/](https://gravity-typography.vercel.app/)** — Run it directly in your browser (60fps)
 
 | | |
 |---|---|
-| ![Status](https://img.shields.io/badge/Status-In_Development-F59E0B?style=flat-square) | ![Stack](https://img.shields.io/badge/Stack-Vanilla_JS-F7DF1E?style=flat-square&logo=javascript&logoColor=black) |
-| ![License](https://img.shields.io/badge/License-MIT-F1C40F?style=flat-square) | ![Deps](https://img.shields.io/badge/Dependencies-Matter.js_CDN-009688?style=flat-square) |
+| ![Demo](https://img.shields.io/badge/Live-Demo-7C3AED?style=for-the-badge&logo=vercel&logoColor=white) | [![Repo](https://img.shields.io/badge/GitHub-sigco3111%2Fgravity--typography-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sigco3111/gravity-typography) |
+| ![Status](https://img.shields.io/badge/Status-Live-22C55E?style=flat-square) | ![Stack](https://img.shields.io/badge/Stack-Matter.js-009688?style=flat-square) |
+| ![License](https://img.shields.io/badge/License-MIT-F1C40F?style=flat-square) | ![Deps](https://img.shields.io/badge/Dependencies-1_CDN-F7DF1E?style=flat-square&logo=javascript&logoColor=black) |
 
----
-
-## 🎮 Quick Controls (planned)
-1. Open the page
+### 🎮 Quick Start
+1. Click the demo link above → page opens in your browser
 2. Watch — letters rain from the top and pile up at the bottom
 3. **Mouse drag** — sweep through the pile to scatter them
-4. **Chaos effects** — letters explode outward in all directions
+4. **Mouse click** — letters near the cursor explode outward in all directions
 
 ---
 
 ## 🤖 Attribution
 
-This project's code is **auto-generated** using the following model and prompt.
+This project's code is **auto-generated** using the model and prompt below.
 
 | Field | Value |
 |---|---|
@@ -37,7 +36,7 @@ This project's code is **auto-generated** using the following model and prompt.
 | **Environment** | OpenCode CLI |
 | **Repository** | [`sigco3111/gravity-typography`](https://github.com/sigco3111/gravity-typography) |
 | **License** | MIT |
-| **Dependencies** | Matter.js (CDN, embedded in single HTML) |
+| **Dependencies** | Matter.js 0.19.0 (CDN, single HTML) |
 
 ### 📝 Prompt Used
 
@@ -48,12 +47,66 @@ Implementation Advice: Use Matter.js for the 2D physics simulation. Each letter 
 
 ---
 
-## 🛠️ Tech Stack (planned)
+## ✨ Features
 
-- **Physics** — Matter.js (CDN)
-- **Rendering** — HTML5 Canvas 2D Context
-- **Language** — Vanilla JavaScript (zero local dependencies)
-- **Bundle** — Single `index.html` with all dependencies embedded
+- 🌧️ **Alphabet Rain** — random letters from A–Z, a–z, and Korean Hangul syllables fall under gravity
+- ⚛️ **Matter.js Physics** — each letter = one Matter rectangle body, up to ~1,600 bodies simulated simultaneously
+- 📐 **Canvas-synced Rendering** — HTML5 Canvas 2D Context redraws every frame, synced with body positions and angles
+- 🏔️ **Natural Pile-up** — friction 0.55 / restitution 0.12 / frictionStatic 0.9 give a real sand-like stacking feel
+- 💥 **Explosion Interaction** — mouse drag/click triggers an impulse on nearby bodies, scattering them explosively
+- 🎨 **Hue Shifting** — each letter gets a rainbow color (HSL interpolation by velocity/age)
+- ⏱️ **Stable 60fps** — `requestAnimationFrame` loop with framerate-independent physics timestep
+- 📦 **Single HTML** — all code in one file, only Matter.js is loaded from CDN
+- 🔒 **On-Device** — all rendering & physics runs in the browser (no server communication)
+
+---
+
+## 🚀 Run It
+
+### Option 1: Live Demo (Vercel) — easiest
+👉 [https://gravity-typography.vercel.app/](https://gravity-typography.vercel.app/) — works out of the box.
+
+### Option 2: Open Locally
+```bash
+open index.html        # macOS
+xdg-open index.html    # Linux
+start index.html       # Windows
+```
+**Internet required** — Matter.js 0.19.0 is loaded from `cdnjs.cloudflare.com`.
+
+### Option 3: Local Server (recommended)
+```bash
+python3 -m http.server 8000
+# → http://localhost:8000
+```
+
+---
+
+## 🎮 Controls
+
+| Input | Effect |
+|---|---|
+| **Idle (default)** | Letters rain from the top, collide with floor & walls, and pile up |
+| **Mouse drag** | Letters swept by the cursor explode outward in all directions |
+| **Mouse click (hold)** | Stronger explosion impulse — letters fly far |
+| **Mouse release** | Letters fall back under gravity and re-stack |
+
+---
+
+## 🛠️ Tech Stack
+
+| Domain | Technology |
+|---|---|
+| **Physics engine** | Matter.js 0.19.0 (CDN, `cdnjs.cloudflare.com`) |
+| **Rendering** | HTML5 Canvas 2D Context + `requestAnimationFrame` |
+| **Mouse interaction** | `mousedown` / `mousemove` / `mouseup` → impulse applied |
+| **Letter generation** | `spawnLetter()` — Korean syllables + A–Z + a–z uniform distribution |
+| **Collision body** | 1 letter = 1 `Bodies.rectangle` (`LETTER_W=17`, `LETTER_H=23` px) |
+| **Spawn interval** | 28ms (while mouse held) / 42ms (default) |
+| **Physics params** | friction 0.55 / frictionStatic 0.9 / restitution 0.12 / gravity y=1 |
+| **Max letters** | 1,600 bodies simulated simultaneously |
+| **Language** | Vanilla JavaScript (ES2020+) |
+| **Bundle** | single `index.html` with embedded code (only Matter.js on CDN) |
 
 ---
 
@@ -61,31 +114,52 @@ Implementation Advice: Use Matter.js for the 2D physics simulation. Each letter 
 
 ```
 gravity-typography/
-├── index.html          # Single HTML file (Matter.js CDN + Canvas + Physics)
+├── index.html          # Single HTML (Matter.js CDN + Canvas + Physics + JS)
 ├── README.md           # Korean (default)
 ├── README.en.md        # English version
-├── LICENSE             # MIT License
-└── .gitignore          # Excludes Node/IDE temp files
+├── LICENSE             # MIT
+└── .gitignore          # Node/IDE/OpenCode temp file exclusion
 ```
 
 ---
 
-## 🚀 Run Locally
+## 🎨 Design Choices
 
-```bash
-git clone https://github.com/sigco3111/gravity-typography.git
-cd gravity-typography
-open index.html        # macOS
-# or open index.html in any browser directly
+Decisions made during brainstorming:
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| **Physics engine** | Matter.js | 2D rigid-body standard, single-file embed, exposes impulse API |
+| **Rendering strategy** | direct Canvas 2D draw | avoid 1,600 DOM nodes; one canvas composites everything |
+| **Letter → body mapping** | rectangle body | rotation of round shapes (O, 0) absorbs cleanly |
+| **Optimization** | 1,600-body cap | stable 60fps on desktop browsers (mobile recommended: ~600) |
+| **Color system** | HSL hue shift | enhanced visual feedback from collisions & movement |
+| **Mouse collision** | query + impulse | `Query.point` for instant adjacent body, `Body.applyForce` for push |
+
+### Customize It Yourself
+
+Tune the constants at the top of `index.html` to change the vibe:
+
+```js
+const LETTER_W      = 17;        // letter width (px)
+const LETTER_H      = 23;        // letter height (px)
+const MAX_LETTERS   = 1600;      // max simultaneous bodies
+const spawnInterval = 42;        // default spawn interval (ms)
+const SPAWN_BURST   = 4;         // letters spawned per frame
+// explosion strength is the 3rd arg of explode(x, y, strength) — range 0..1
 ```
-
-**Internet connection required** — Matter.js is loaded from CDN (`cdn.jsdelivr.net`).
 
 ---
 
 ## 📜 License
 
-MIT License — use, modify, and distribute freely.
+MIT © 2026 sigco3111
+
+---
+
+## 🙏 Acknowledgments
+
+This project was auto-generated by the [MiniMax-M3](https://example.com) model in the OpenCode CLI environment. Prompt engineering and design decisions were made by the repository owner.
 
 ---
 
