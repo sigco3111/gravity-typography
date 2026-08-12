@@ -10,7 +10,7 @@
 
 ## 🎬 라이브 데모 (Live Demo)
 
-> **👉 [https://gravity-typography.vercel.app/](https://gravity-typography.vercel.app/)** — 브라우저에서 바로 실행 (60fps)
+> **👉 [https://sigco3111.github.io/gravity-typography/](https://sigco3111.github.io/gravity-typography/)** — 브라우저에서 바로 실행 (60fps)
 
 | | |
 |---|---|
@@ -64,7 +64,7 @@ Implementation Advice: Use Matter.js for the 2D physics simulation. Each letter 
 ## 🚀 실행 방법 (Quick Start)
 
 ### 방법 1: 라이브 데모 (Vercel) — 가장 간단
-👉 [https://gravity-typography.vercel.app/](https://gravity-typography.vercel.app/) — 별도 설치 없이 바로 실행됩니다.
+👉 [https://sigco3111.github.io/gravity-typography/](https://sigco3111.github.io/gravity-typography/) — 별도 설치 없이 바로 실행됩니다.
 
 ### 방법 2: 그냥 브라우저로 열기
 ```bash
