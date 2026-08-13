@@ -14,7 +14,7 @@
 
 | | |
 |---|---|
-| ![Demo](https://img.shields.io/badge/Live-Demo-7C3AED?style=for-the-badge&logo=vercel&logoColor=white) | [![Repo](https://img.shields.io/badge/GitHub-sigco3111%2Fgravity--typography-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sigco3111/gravity-typography) |
+| ![Demo](https://img.shields.io/badge/Live-Demo-222222?style=for-the-badge&logo=githubpages&logoColor=white) | [![Repo](https://img.shields.io/badge/GitHub-sigco3111%2Fgravity--typography-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sigco3111/gravity-typography) |
 | ![Status](https://img.shields.io/badge/Status-Live-22C55E?style=flat-square) | ![Stack](https://img.shields.io/badge/Stack-Matter.js-009688?style=flat-square) |
 | ![License](https://img.shields.io/badge/License-MIT-F1C40F?style=flat-square) | ![Deps](https://img.shields.io/badge/Dependencies-1_CDN-F7DF1E?style=flat-square&logo=javascript&logoColor=black) |
 
@@ -63,7 +63,7 @@ Implementation Advice: Use Matter.js for the 2D physics simulation. Each letter 
 
 ## 🚀 실행 방법 (Quick Start)
 
-### 방법 1: 라이브 데모 (Vercel) — 가장 간단
+### 방법 1: 라이브 데모 (GitHub Pages) — 가장 간단
 👉 [https://sigco3111.github.io/gravity-typography/](https://sigco3111.github.io/gravity-typography/) — 별도 설치 없이 바로 실행됩니다.
 
 ### 방법 2: 그냥 브라우저로 열기
